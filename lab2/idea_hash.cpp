@@ -167,96 +167,43 @@ std::optional<T> nextBlock(Iterator &current, Iterator &end) {
     return {block};
 }
 
-std::array<uint32_t, 4> readKeyFile(const std::string &keyFile) {
-    std::ifstream is(keyFile, std::ios::binary);
+uint32_t lower(uint64_t num) {
+    return (num << 32) >> 32;
+}
+
+uint32_t upper(uint64_t num) {
+    return num >> 32;
+}
+
+uint64_t fileHash(const std::string &fileName) {
+    std::ifstream is(fileName, std::ios::binary);
     is >> std::noskipws;
     Iterator current{is};
     Iterator end{};
-    std::array<uint32_t, 4> key{};
-
-    for (int i = 0; i < 4; ++i) {
-        key[i] = nextBlock<uint32_t>(current, end).value();
-    }
-
-    return key;
-}
-
-uint64_t fileSize(std::ifstream &is) {
-    is.seekg(0, std::ios::end);
-    uint64_t res = is.tellg();
-    is.seekg(0, std::ios::beg);
-    return res;
-}
-
-template<typename POD>
-void writePod(std::ostream &os, const POD &pod) {
-    static_assert(std::is_pod<POD>::value);
-    for (int i = 0; i < sizeof(pod); ++i) {
-        const char byte = (pod & (POD(0xFF) << (8 * i))) >> (8 * i);
-        os.put(byte);
-    }
-}
-
-void encryptFile(const std::string &keyFile, const std::string &inputFile, const std::string &outputFile) {
-    auto key = readKeyFile(keyFile);
-    std::ifstream is(inputFile, std::ios::binary);
-    is >> std::noskipws;
-    uint64_t isSize = fileSize(is);
-    std::ofstream os(outputFile, std::ios::binary);
-    Iterator current{is};
-    Iterator end{};
-
-    auto ek = transformSubkeys(makeEncryptSubkeys(key));
-
-    writePod(os, isSize);
+    constexpr std::array<uint32_t, 3> seeds = {0x4a7f2e61, 0x9d3f80c5};
+    uint64_t result = 0x2b3c5a7d4f9b8a6c;
     while (true) {
-        auto block = nextBlock<uint64_t>(current, end);
-        if (!block) {
+        auto nextFileBlock = nextBlock<uint64_t>(current, end);
+        if (!nextFileBlock) {
             break;
         }
-        uint64_t enBlock = encrypt(*block, ek);
-        writePod(os, enBlock);
+        auto ek = transformSubkeys(makeEncryptSubkeys({seeds[0],
+                                                       lower(result),
+                                                       seeds[1],
+                                                       upper(result)}));
+        result = encrypt(*nextFileBlock, ek) ^ *nextFileBlock;
     }
-}
-
-void decryptFile(const std::string &keyFile, const std::string &inputFile, const std::string &outputFile) {
-    auto key = readKeyFile(keyFile);
-    std::ifstream is(inputFile, std::ios::binary);
-    is >> std::noskipws;
-    std::ofstream os(outputFile, std::ios::binary);
-    Iterator current{is};
-    Iterator end{};
-
-    uint64_t origSize = nextBlock<uint64_t>(current, end).value();
-    auto dk = makeDecryptSubkeys(key);
-
-    for (uint64_t i = 0; i < origSize; i += 8) {
-        uint64_t block = nextBlock<uint64_t>(current, end).value();
-        uint64_t deBlock = encrypt(block, dk);
-
-        if (i + 8 >= origSize) {
-            uint64_t remain = origSize % 8;
-            if (remain == 0) {
-                remain = 8;
-            }
-            for (uint64_t j = 0; j < remain; ++j) {
-                uint8_t block8 = (deBlock & (uint64_t(0xFF) << (8 * j))) >> (8 * j);
-                writePod(os, block8);
-            }
-        } else {
-            writePod(os, deBlock);
-        }
-    }
+    return result;
 }
 
 int main(int argc, char **argv) {
-    if (argc != 5) {
+    if (argc != 2) {
         std::cerr << "Wrong count of args" << std::endl;
         return 1;
     }
 
-    auto func = std::string(argv[1]) == "e" ? encryptFile : decryptFile;
-    func(std::string(argv[2]), std::string(argv[3]), std::string(argv[4]));
+    uint64_t hash = fileHash(std::string(argv[1]));
+    std::cout << std::hex << hash << std::endl;
 
     return 0;
 }
