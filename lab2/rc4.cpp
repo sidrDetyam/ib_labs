@@ -52,6 +52,8 @@ int main() {
     const std::string plain = "hello ib_lab2";
     auto encrypted = encrypt(plain, key);
     auto decrypted = encrypt(encrypted, key);
+
+    // Проверяем, что мы правильно декодируем строку
     std::cout << (plain == decrypted) << std::endl;
 
     return 0;
