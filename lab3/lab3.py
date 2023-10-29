@@ -1,5 +1,6 @@
 import png
 import random
+import sys
 
 
 def unique_random_pixel_generator(cnt_rows, cnt_columns):
@@ -10,7 +11,7 @@ def unique_random_pixel_generator(cnt_rows, cnt_columns):
             row = random.randint(0, cnt_rows - 1)
             column = random.randint(0, cnt_columns - 1)
             pair = (row, column)
-            if pair not in used:
+            if pair not in used and column % 4 == 1:
                 used.add(pair)
                 return pair
 
@@ -94,5 +95,10 @@ def decode(png_in, datafile, seed=1337):
         file.write(bytes(bytes_))
 
 
-encode("example.txt", "tux.png", "container.png")
-decode("container.png", "example_.txt")
+if sys.argv[1] == "e":
+    datafile, png_in, container = sys.argv[2], sys.argv[3], sys.argv[4]
+    encode(datafile, png_in, container)
+
+if sys.argv[1] == "d":
+    container, png_out = sys.argv[2], sys.argv[3]
+    decode(container, png_out)
